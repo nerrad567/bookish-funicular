@@ -104,8 +104,8 @@ COUNTER_FILE=".rsync_backup_counter"
 SOURCE_DIR="/home/darren/test"
 BACKUP_ROOT="/home/darren/bkup"
 PRESERVED_BACKUPS_DIR="$BACKUP_ROOT/preserved"
-LOG_FILE="/var/log/rsync_backup.log"
-ERROR_LOG_FILE="/var/log/rsync_backup_error.log"
+LOG_FILE="rsync_backup.log"
+ERROR_LOG_FILE="rsync_backup_error.log"
 IS_REMOTE=false
 
 # Parse command line arguments
@@ -143,7 +143,8 @@ BACKUP_DIR="$BACKUP_ROOT/$DATE"
 
 if perform_rsync "$SOURCE_DIR" "$BACKUP_DIR" "$IS_REMOTE"; then
   echo "Rsync backup successful: $DATE" >> "$LOG_FILE"
-  ln -sfn "$DATE" "$BACKUP_ROOT/latest"
+  ln -sfn "$BACKUP_ROOT/$DATE/"* "$BACKUP_ROOT/latest/"
+
 else
   echo "Rsync backup failed: $DATE. See $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
   exit 1
