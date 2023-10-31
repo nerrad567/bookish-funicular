@@ -1,0 +1,101 @@
+#
+# Docker Compose Configuration for Nginx Proxy, Deluge, WireGuard, and Filebrowser
+#
+# This Docker Compose file orchestrates multiple services to provide a seamless
+# integration of Nginx as a proxy, Deluge for torrenting, WireGuard for VPN,
+# and Filebrowser for file management.
+#
+# Services:
+# - nginx:        Serves as a reverse proxy, handling SSL/TLS and HTTP traffic.
+# - deluge:       A lightweight, full-featured BitTorrent client.
+# - wireguard:    Modern VPN service that aims to be fast, simple, and secure.
+# - filebrowser:  A web-based file manager with a sleek interface.
+#
+# Each service is configured with necessary environment variables, volumes,
+# and network settings to ensure smooth operation and data persistence.
+#
+# Author: https://github.com/nerrad567/bookish-funicular
+#
+# Dependencies:
+# - Docker
+# - Docker Compose
+#
+# Instructions:
+# 1. Ensure Docker and Docker Compose are installed on your system.
+# 2. Clone the repository and navigate to the directory containing this file.
+# 3. Run 'docker-compose up -d' to start the services in detached mode.
+# 4. Access the services via their respective ports and configure as needed.
+#
+# Note: Make sure to review and adjust volume mappings and environment variables
+# according to your system's configuration and your personal preferences.
+
+version: "3"
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/auth/.htpasswd:/etc/nginx/auth/.htpasswd
+      - ./nginx/www:/etc/nginx/www
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+  deluge:
+    image: linuxserver/deluge
+    container_name: deluge
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - ./deluge/config:/config
+      - ./data:/downloads
+    ports:
+      - "8112:8112"
+      - "58846:58846"
+      - "58946:58946"
+
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    # network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      - SERVERPORT=51820
+      - PEERS=laptop,desktop,tablet,mobile,ClientWolverine,ClientSpideySense,ClientDarkKnight,ClientIronHack,ClientGrootLoop,ClientCapedCoder,ClientHulkSmash,ClientFlashDrive,ClientThorHammer,ClientWebSlinger
+      - PEERDNS=auto
+      - DNSMODULE=true
+      - ALLOWEDIPS=0.0.0.0/0
+    volumes:
+      - ./wireguard/config:/config
+    ports:
+      - 51820:51820/udp
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    volumes:
+      - ./data:/srv # Change this to the folder you want Filebrowser to manage
+      - /home/darren/vps-core-services/filebrowser/database.db:/database.db # Change this to where you want to store your Filebrowser database
+      - /home/darren/vps-core-services/filebrowser/config/settings.json:/.filebrowser.json # Change this to where you want to store your settings file
+    environment:
+      - FB_HTTP_ADDR=127.0.0.1
+      - FB_HTTP_PORT=80
+      - FB_LOG=stdout # Outputs logs to stdout, useful for Docker logs
+      - FB_BASEURL=/filebrowser # Empty by default, you can specify a base URL here
+    ports:
+      - "127.0.0.1:8080:80" # Change the first value to the port you want to expose Filebrowser on
+

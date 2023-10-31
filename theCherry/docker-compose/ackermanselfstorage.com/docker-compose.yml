@@ -1,0 +1,13 @@
+version: "3"
+services:
+  ackerman-web:
+    image: nginx:alpine
+    volumes:
+      - ...ackermanselfstorage.com/www:/usr/share/nginx/html
+      - ...ackermanselfstorage.com/conf/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - websites
+
+networks:
+  websites:
+    external: true
