@@ -1,0 +1,24 @@
+# -------------------------------------------------------------
+# Title: IP Change Monitoring Service
+# Description: A systemd service configured to execute a Bash script
+#              that monitors and responds to IP address changes, ensuring
+#              network configuration continuity.
+# Author: https://github.com/nerrad567/bookish-funicular
+# -------------------------------------------------------------
+
+[Unit]
+Description=Monitor IP Change Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/bin/bash monitor_ip_change.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

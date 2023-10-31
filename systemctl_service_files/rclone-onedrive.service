@@ -1,0 +1,22 @@
+# -------------------------------------------------------------
+# Title: Rclone OneDrive Mount Service
+# Description: Ensures a stable mount of OneDrive using Rclone at 
+#              system startup, providing seamless file synchronization 
+#              and access.
+# Author: https://github.com/nerrad567/bookish-funicular
+# -------------------------------------------------------------
+
+
+[Unit]
+Description=Rclone OneDrive Mount
+After=network.target
+
+[Service]
+Type=simple
+User=darren
+ExecStart=/usr/bin/rclone mount onedrive:/ /home/OneDrive --vfs-cache-mode full
+ExecStop=/bin/fusermount -u /home/OneDrive
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

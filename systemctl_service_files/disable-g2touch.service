@@ -1,0 +1,21 @@
+# -------------------------------------------------------------
+# Title: G2Touch Multi-Touch Disabler Service
+# Description: This systemd service ensures the persistent 
+#              disabling of the G2Touch Multi-Touch functionality
+#              on startup, providing a stable and controlled 
+#              user environment.
+# Author: https://github.com/nerrad567/bookish-funicular
+# -------------------------------------------------------------
+
+[Unit]
+Description=Disable G2Touch Multi-Touch by G2TSP
+After=multi-user.target
+
+[Service]
+ExecStart=/home/darren/force-disable-g2touch.sh
+Environment=DISPLAY=:0
+Restart=on-failure
+User=darren
+
+[Install]
+WantedBy=multi-user.target
