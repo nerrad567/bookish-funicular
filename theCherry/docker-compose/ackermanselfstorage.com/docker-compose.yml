@@ -1,3 +1,17 @@
+# Ackerman Web Service Configuration
+# This Docker Compose file initiates the Ackerman Web Service, utilizing the lightweight and
+# high-performance NGINX Alpine image to serve the web content efficiently. Mapped volumes
+# ensure proper content delivery and configuration. This setup relies on an external
+# network named 'websites' for seamless connectivity.
+#
+# Author: https://github.com/nerrad567/bookish-funicular
+#
+# Dependencies
+# - Docker version 19.03.0+
+# - Docker Compose version 3
+# - Access to NGINX Alpine image
+# - Pre-configured external network 'websites'
+
 version: "3"
 services:
   ackerman-web:

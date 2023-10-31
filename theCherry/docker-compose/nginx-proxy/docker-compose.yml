@@ -1,0 +1,39 @@
+# NGINX Proxy Service Setup
+# This configuration outlines the setup for an NGINX container acting as a
+# proxy, directing traffic and handling SSL/TLS termination. Volumes are
+# carefully mounted to include necessary configurations, SSL certificates,
+# and web content. The service is accessible via standard HTTP and HTTPS
+# ports, ensuring easy web traffic management.
+#
+# Author: https://github.com/nerrad567/bookish-funicular
+#
+# Dependencies:
+# - Docker 19.03.0+
+# - Docker Compose version "3"
+# - NGINX Alpine Docker Image
+# - Access to persistent storage for configurations, SSL certificates,
+#   and web content
+# - Pre-configured external network 'websites'
+
+version: "3"
+services:
+  nginx-proxy:
+    image: nginx:alpine
+    volumes:
+      - /.../conf/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - /.../conf/nginx/dhparam.pem:/etc/nginx/dhparam.pem
+      - /.../conf/nginx/ssl:/etc/nginx/ssl
+      - /.../docker-volumes/certbot/www:/var/www/certbot
+      - /.../docker-volumes/certbot/conf:/etc/letsencrypt
+      - /.../www:/var/www/html
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    networks:
+      - websites
+
+networks:
+  websites:
+    external: true

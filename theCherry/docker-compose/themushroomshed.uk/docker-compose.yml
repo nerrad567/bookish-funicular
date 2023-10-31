@@ -1,0 +1,28 @@
+# Mushroom Web Service Configuration
+# This YAML file orchestrates the Mushroom Web Service, employing NGINX within
+# an Alpine container for lightweight, efficient web serving. Volumes are set
+# to ensure the appropriate content and configurations are loaded. Network
+# connectivity is established through a predefined external network.
+#
+# Author: https://github.com/nerrad567/bookish-funicular
+#
+# Dependencies:
+# - Docker 19.03.0+
+# - Docker Compose version '3'
+# - NGINX Alpine Docker Image
+# - Configured persistent storage for web content and NGINX configurations
+# - Pre-configured external network 'websites'
+
+version: "3"
+services:
+  mushroom-web:
+    image: nginx:alpine
+    volumes:
+      - /.../docker-volumes/themushroomshed.uk/www:/usr/share/nginx/html
+      - /.../docker-volumes/themushroomshed.uk/conf/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - websites
+
+networks:
+  websites:
+    external: true

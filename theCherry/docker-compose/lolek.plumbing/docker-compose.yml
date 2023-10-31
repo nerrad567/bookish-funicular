@@ -1,0 +1,35 @@
+# Lolek Web Service Configuration
+# This configuration file sets up a simple yet efficient web service using
+# NGINX and PHP, both running in Alpine containers for minimal overhead.
+# Volumes are mounted to ensure proper sharing of web content and
+# configuration files between the host and the containers. The services
+# are connected through an externally defined 'websites' network.
+#
+# Author: https://github.com/nerrad567/bookish-funicular
+#
+# Dependencies:
+# - Docker 19.03.0+
+# - Docker Compose '3'
+# - NGINX Alpine Docker Image
+# - PHP 7.4 FPM Alpine Docker Image
+# - Access to persistent storage for web content and configurations
+# - Pre-configured external network 'websites'
+version: "3"
+services:
+  lolek-web:
+    image: nginx:alpine
+    volumes:
+      - /..../lolek.plumbing/www:/var/www/html
+      - /..../lolek.plumbing/conf/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - websites
+  php:
+    image: php:7.4-fpm-alpine
+    volumes:
+      - /..../lolek.plumbing/www:/var/www/html
+    networks:
+      - websites
+
+networks:
+  websites:
+    external: true
