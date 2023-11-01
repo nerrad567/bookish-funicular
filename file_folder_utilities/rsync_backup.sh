@@ -8,9 +8,9 @@
 # ./backup_script.sh [SOURCE_DIR] [BACKUP_ROOT] [NUM_BACKUPS]
 #
 # Arguments:
-# - SOURCE_DIR:   The directory to be backed up. Defaults to '/home/darren/test' if not provided.
+# - SOURCE_DIR:   The directory to be backed up.
 # - BACKUP_ROOT:  The root directory where backups will be stored. Can be a local path or a remote path in the 
-#                 format 'user@host:/path/to/directory'. Defaults to '/home/darren/bkup' if not provided.
+#                 format 'user@host:/path/to/directory'.
 # - NUM_BACKUPS:  The number of backups to retain. Older backups beyond this limit will be rotated (deleted).
 #                 Defaults to 5 if not provided.
 #
@@ -50,78 +50,62 @@
 #
 # ==========================================================================================================
 
-
-# Function to check and create directory
-check_and_create_dir() {
-  local dir=$1
-  local is_remote=$2
-  
-  if [ "$is_remote" = true ]; then
-    local host="${dir%%:*}"
-    local path="${dir#*:}"
-    ssh -i "$SSH_KEY" "$host" "mkdir -p '$path'" 2>/dev/null || { echo "Error: Unable to create remote directory $path on $host"; exit 1; }
-  else
-    mkdir -p "$dir" 2>/dev/null || { echo "Error: Unable to create local directory $dir"; exit 1; }
-  fi
-}
-
-# Function to perform rsync operation
-perform_rsync() {
-  local source_dir=$1
-  local dest_dir=$2
-  local is_remote=$3
-  
-  if [ "$is_remote" = true ]; then
-    rsync -e "ssh -i $SSH_KEY" -ah --delete --link-dest="$BACKUP_ROOT/latest" "$source_dir" "$dest_dir" 2>"$ERROR_LOG_FILE"
-  else
-    rsync -ah --delete --link-dest="$BACKUP_ROOT/latest" "$source_dir" "$dest_dir" 2>"$ERROR_LOG_FILE"
-  fi
-}
-
-# Function to rotate backups, aka remove older backups than NUM_BACKUPS
-rotate_backups() {
-  local backup_root=$1
-  local num_backups=$2
-  
-  cd "$backup_root" || { echo "Error: Unable to access backup directory $backup_root"; exit 1; }
-  ls -t | grep -v preserved | sed -e "1,${num_backups}d" | xargs -d '\n' -r rm -rf --
-}
-
-# Function to create a preservation snapshot
-create_preservation_snapshot() {
-  local source_dir=$1
-  local dest_dir=$2
-  
-  rsync -ah "$source_dir/" "$dest_dir" || { echo "Error: Preservation snapshot failed"; exit 1; }
-  echo "Preservation snapshot created: $dest_dir"
-}
-
 # Initialize default configuration
-SSH_KEY="~/.ssh/id_rsa"
-NUM_BACKUPS=5
-PRESERVE_INTERVAL=10
-COUNTER_FILE=".rsync_backup_counter"
-SOURCE_DIR="/home/darren/test"
-BACKUP_ROOT="/home/darren/bkup"
-PRESERVED_BACKUPS_DIR="$BACKUP_ROOT/preserved"
-LOG_FILE="rsync_backup.log"
-ERROR_LOG_FILE="rsync_backup_error.log"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SSH_KEY=""
+NUM_BACKUPS=15
+PRESERVE_INTERVAL=5
+COUNTER_FILE="$SCRIPT_DIR/.rsync_backup_counter"
+SOURCE_DIR=""
+BACKUP_ROOT=""
+LOG_FILE="$SCRIPT_DIR/rsync_backup.log"
+ERROR_LOG_FILE="$SCRIPT_DIR/rsync_backup_error.log"
 IS_REMOTE=false
+DATE=$(date +"%d%m%Y"_"%H%M%S")
+BACKUP_DIR="$BACKUP_ROOT/$DATE"
+HOST="${BACKUP_ROOT%%:*}"
+PRESERVED_BACKUPS_DIR="$BACKUP_ROOT/preserved"
 
 # Parse command line arguments
 SOURCE_DIR="${1:-$SOURCE_DIR}"
 BACKUP_ROOT="${2:-$BACKUP_ROOT}"
 NUM_BACKUPS="${3:-$NUM_BACKUPS}"
 
-# Check if remote
+# Check if remote & adjust paths
 if [[ "$BACKUP_ROOT" == *":"* ]]; then
   IS_REMOTE=true
+  LATEST_BACKUP_DIR="${BACKUP_ROOT#*:}/latest"
+  SYM_TARGET="${BACKUP_ROOT#*:}/$DATE/*"
+  BACKUP_ROOT_FOLDER="${BACKUP_ROOT#*:}"  
+else
+  LATEST_BACKUP_DIR="$BACKUP_ROOT/latest"
+  SYM_TARGET="$BACKUP_ROOT/$DATE/*"
+  BACKUP_ROOT_FOLDER=$BACKUP_ROOT
 fi
 
-# Check if directorys exist, and create if it not.
-check_and_create_dir "$BACKUP_ROOT" "$IS_REMOTE"
-check_and_create_dir "$PRESERVED_BACKUPS_DIR" "$IS_REMOTE"
-check_and_create_dir "$BACKUP_ROOT/latest" "$IS_REMOTE"
+# excludes relative to backup folder
+EXCLUDE_LIST=(
+  "docker-volumes/certbot/conf/accounts"
+  "docker-volumes/certbot/conf/archive"
+  "docker-volumes/certbot/conf/live"
+  "docker-volumes/nginx-proxy/conf/nginx/ssl/default.key"
+)
+
+RSYNC_EXCLUDES=()
+for item in "${EXCLUDE_LIST[@]}"; do
+  RSYNC_EXCLUDES+=(--exclude="$item")
+done
+
+
+# Initialize or update the backup counter
+
+if [ -f "$COUNTER_FILE" ]; then
+  COUNTER=$(( $(<"$COUNTER_FILE") + 1 ))
+else
+  COUNTER=1
+fi
+echo " ℹ️    Backups until preservation snapshot: " $((PRESERVE_INTERVAL - COUNTER))
+echo "$COUNTER" > "$COUNTER_FILE"
 
 # Validate source directory
 if [ ! -d "$SOURCE_DIR" ]; then
@@ -129,35 +113,138 @@ if [ ! -d "$SOURCE_DIR" ]; then
   exit 1
 fi
 
-# Initialize or update the backup counter
-if [ -f "$COUNTER_FILE" ]; then
-  COUNTER=$(( $(<"$COUNTER_FILE") + 1 ))
-else
-  COUNTER=1
-fi
-echo "$COUNTER" > "$COUNTER_FILE"
+
+# Function to check and create directory
+# check_and_create_dir "$BACKUP_ROOT" "$IS_REMOTE"
+# check_and_create_dir "$PRESERVED_BACKUPS_DIR" "$IS_REMOTE"
+# check_and_create_dir "$LATEST_BACKUP_DIR" "$IS_REMOTE"
+check_and_create_dir() {
+  local dir=$1
+  local is_remote=$2
+  
+  if [ "$is_remote" = true ]; then
+    local host="${dir%%:*}"
+    local path="${dir#*:}"
+    ssh -i "$SSH_KEY" "$host" "mkdir -p '$path'" 2>/dev/null || { echo "Error: Unable to create remote directory $path on $host"; exit 1; } 
+  else
+    mkdir -p "$dir" 2>/dev/null || { echo "Error: Unable to create local directory $dir"; exit 1; }
+  fi
+}
+
+# Function to perform rsync operation
+# perform_rsync "$SOURCE_DIR" "$BACKUP_DIR" "$IS_REMOTE";
+perform_rsync() {
+  local source_dir=$1
+  local backup_dir=$2
+  local is_remote=$3
+
+  if [ "$is_remote" = true ]; then
+    rsync -e "ssh -i $SSH_KEY" -ah "${RSYNC_EXCLUDES[@]}" "$source_dir" "$backup_dir" 2>"$ERROR_LOG_FILE"
+  else
+    rsync -ah "${RSYNC_EXCLUDES[@]}" "$source_dir" "$backup_dir" 2>"$ERROR_LOG_FILE"
+  fi
+}
+
+
+# Function to create a symbolic link
+# create_symbolic_link "$SYM_TARGET" "$LATEST_BACKUP_DIR" "$IS_REMOTE"
+create_symbolic_link() {
+  local source_backup_dir=$1
+  local latest_backup_dir=$2
+  local is_remote=$3
+  if [ "$is_remote" = true ]; then
+    ssh -i "$SSH_KEY" "$HOST" "ln -sfn $source_backup_dir $latest_backup_dir" 2>/dev/null || { echo "Error: Unable to create remote symbolic link from $source_backup_dir to $latest_backup_dir on $HOST"; return 1; }
+  else
+    ln -sfn $source_backup_dir $latest_backup_dir 2>/dev/null || { echo "Error: Unable to create local symbolic link from $target_dir to $link_name"; return 1; }
+  fi
+}
+
+# Function to create a preservation snapshot
+# create_preservation_snapshot "$SOURCE_DIR" "$PRESERVED_BACKUPS_DIR"  "$IS_REMOTE"
+create_preservation_snapshot() {
+  local source_dir=$1
+  local dest_dir=$2/$DATE
+  local is_remote=$3
+ 
+  if [ "$is_remote" = true ]; then
+    echo "⏳   Creating preservation archive..."
+    rsync -e "ssh -i $SSH_KEY" -ah "${RSYNC_EXCLUDES[@]}" "$source_dir" "$dest_dir" 2>"$ERROR_LOG_FILE"
+  else
+    rsync -ah "${RSYNC_EXCLUDES[@]}" "$source_dir" "$dest_dir" 2>"$ERROR_LOG_FILE"
+  fi 
+
+
+}
+
+
+# Function to rotate backups, aka remove older backups than NUM_BACKUPS
+# rotate_backups "$BACKUP_ROOT_FOLDER" "$NUM_BACKUPS"
+rotate_backups() {
+  local backup_root_folder=$1
+  local num_backups=$2
+  local is_remote=$3
+
+  if [ "$is_remote" = true ]; then
+    ssh -i "$SSH_KEY" "$HOST" "ls -t '$backup_root_folder' | grep -v preserved | sed -e '1,${num_backups}d' | xargs -I {} -r rm -rf -- '$backup_root_folder/{}'" 2>/dev/null || { echo "Error: Unable to manage backups in directory $backup_root_folder on $HOST"; exit 1; }
+
+  else
+    cd "$backup_root_folder" || { echo "Error: Unable to access backup directory $backup_root"; exit 1; }
+    ls -t | grep -v preserved | sed -e "1,${num_backups}d" | xargs -d '\n' -r rm -rf --
+  fi  
+
+}
+
+# Check if directories exist, and create if not.
+echo "⏳   Checking necessary directories and creating if they do not exist..."
+check_and_create_dir "$BACKUP_ROOT" "$IS_REMOTE"
+check_and_create_dir "$PRESERVED_BACKUPS_DIR" "$IS_REMOTE"
+check_and_create_dir "$BACKUP_ROOT/latest" "$IS_REMOTE"
+echo "✅   Directory check and creation complete."
 
 # Perform the backup
-DATE=$(date +"%Y%m%d%H%M%S")
-BACKUP_DIR="$BACKUP_ROOT/$DATE"
-
+echo "⏳   Starting rsync backup..."
 if perform_rsync "$SOURCE_DIR" "$BACKUP_DIR" "$IS_REMOTE"; then
-  echo "Rsync backup successful: $DATE" >> "$LOG_FILE"
-  ln -sfn "$BACKUP_ROOT/$DATE/"* "$BACKUP_ROOT/latest/"
-
+  echo "✅    Rsync backup successful:  $DATE" | tee -a "$LOG_FILE"
 else
-  echo "Rsync backup failed: $DATE. See $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
-  exit 1
+  rsync_exit_status=$?
+  if [ $rsync_exit_status -eq 23 ]; then
+    echo "⚠️   Warning: Rsync encountered some files/directories that could not be transferred (e.g., due to permissions). Check $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
+  else
+    echo "⚠️   Error: Rsync backup failed: $DATE. Check $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
+    echo "⚠️   Exiting...   ⚠️"
+    exit 1
+  fi
+fi
+
+echo "⏳   Updating latest backup symbolic link..."
+if ! create_symbolic_link "$SYM_TARGET" "$LATEST_BACKUP_DIR" "$IS_REMOTE"; then
+  echo "⚠️   Warning: Symbolic link creation failed. Check $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
+else
+  echo "✅   Latest backup symbolic link updated successfully."
 fi
 
 # Create a preservation snapshot if needed
 if [ "$COUNTER" -ge "$PRESERVE_INTERVAL" ]; then
-  PRESERVED_BACKUP_DIR="$PRESERVED_BACKUPS_DIR/$DATE"
-  create_preservation_snapshot "$BACKUP_DIR" "$PRESERVED_BACKUP_DIR"
-  echo 0 > "$COUNTER_FILE"
+  echo "⏳   Backup counter reached $PRESERVE_INTERVAL. Creating a preservation snapshot..."
+  if create_preservation_snapshot "$SOURCE_DIR" "$PRESERVED_BACKUPS_DIR" "$IS_REMOTE"; then
+    echo "✅   Preservation snapshot created successfully."
+    echo 0 > "$COUNTER_FILE"
+  else
+    rsync_exit_status=$?
+    if [ $rsync_exit_status -eq 23 ]; then
+      echo "⚠️   Warning: Rsync encountered some files/directories that could not be transferred (e.g., due to permissions). Check $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
+      echo 0 > "$COUNTER_FILE"
+    else
+      echo "⚠️   Error: Rsync backup failed: $DATE. Check $ERROR_LOG_FILE for details." >> "$LOG_FILE" >&2
+      echo "⚠️   Exiting...   ⚠️"  
+    fi
+  fi
 fi
 
 # Rotate old backups
-rotate_backups "$BACKUP_ROOT" "$NUM_BACKUPS"
-
-
+echo "⏳   Rotating old backups. Keeping the last $NUM_BACKUPS backups..."
+if rotate_backups "$BACKUP_ROOT_FOLDER" "$NUM_BACKUPS" "$IS_REMOTE"; then
+  echo "✅   Backup rotation complete. Old backups beyond the last $NUM_BACKUPS have been deleted."
+else
+  echo "⚠️   Warning: Backup rotation failed. Check $ERROR_LOG_FILE for details."
+fi
